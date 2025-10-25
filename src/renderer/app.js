@@ -1,5 +1,4 @@
-const { ipcRenderer } = require('electron');
-
+// Sử dụng electronAPI từ preload script thay vì require trực tiếp
 let licenseManager = null;
 let isLicenseValid = false;
 let isShowingLicenseForm = false;
@@ -7,11 +6,11 @@ let isShowingLicenseForm = false;
 // Khởi tạo app
 document.addEventListener('DOMContentLoaded', async () => {
     // Lấy device ID
-    const deviceId = await ipcRenderer.invoke('get-device-id');
+    const deviceId = await window.electronAPI.getDeviceId();
     document.getElementById('device-id').textContent = deviceId;
     
     // Kiểm tra license (sử dụng cache)
-    const isValid = await ipcRenderer.invoke('validate-license');
+    const isValid = await window.electronAPI.validateLicense();
     isLicenseValid = isValid;
     
     if (!isValid) {
@@ -91,7 +90,7 @@ function hideLicenseLock() {
 }
 
 function exitApp() {
-    ipcRenderer.send('exit-app');
+    window.electronAPI.exitApp();
 }
 
 // Navigation functions
@@ -160,7 +159,7 @@ async function activateLicense() {
     showStatus('Activating license...', 'info');
     
     try {
-        const success = await ipcRenderer.invoke('activate-license', licenseKey);
+        const success = await window.electronAPI.activateLicense(licenseKey);
         
         if (success) {
             showStatus('License activated successfully!', 'success');
@@ -198,7 +197,7 @@ function showAppContent() {
 // Cập nhật thông tin license
 async function updateLicenseInfo() {
     try {
-        const licenseInfo = await ipcRenderer.invoke('get-license-info');
+        const licenseInfo = await window.electronAPI.getLicenseInfo();
         
         if (licenseInfo) {
             const details = document.getElementById('license-details');
@@ -245,7 +244,7 @@ async function forceValidateLicense() {
     showStatus('Force validating license...', 'info');
     
     try {
-        const isValid = await ipcRenderer.invoke('force-validate-license');
+        const isValid = await window.electronAPI.forceValidateLicense();
         isLicenseValid = isValid;
         
         if (isValid) {
@@ -266,7 +265,7 @@ async function clearCacheAndValidate() {
         showStatus('Clearing cache and validating...', 'info');
         
         try {
-            const isValid = await ipcRenderer.invoke('clear-cache-and-validate');
+            const isValid = await window.electronAPI.clearCacheAndValidate();
             isLicenseValid = isValid;
             
             if (isValid) {
@@ -286,7 +285,7 @@ async function clearCacheAndValidate() {
 async function deactivateLicense() {
     if (confirm('Are you sure you want to deactivate the license on this device?')) {
         try {
-            const success = await ipcRenderer.invoke('deactivate-license');
+            const success = await window.electronAPI.deactivateLicense();
             
             if (success) {
                 showStatus('License deactivated successfully', 'success');
@@ -315,12 +314,19 @@ function showStatus(message, type) {
 }
 
 // Lắng nghe events từ main process
-ipcRenderer.on('show-license-form', () => {
+window.electronAPI.onShowLicenseForm(() => {
     showLicenseForm();
 });
 
-ipcRenderer.on('license-invalid', () => {
+window.electronAPI.onLicenseInvalid(() => {
     showStatus('License is no longer valid. Please reactivate.', 'error');
+    isLicenseValid = false;
+    isShowingLicenseForm = false;
+    showLicenseLock();
+});
+
+window.electronAPI.onLicenseRevoked(() => {
+    showStatus('License has been revoked by administrator.', 'error');
     isLicenseValid = false;
     isShowingLicenseForm = false;
     showLicenseLock();

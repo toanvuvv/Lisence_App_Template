@@ -47,11 +47,21 @@ class LicenseManager {
      */
     async activate(licenseKey) {
         try {
+            // Input validation
+            if (!licenseKey || typeof licenseKey !== 'string' || licenseKey.trim().length === 0) {
+                throw new Error('Invalid license key format');
+            }
+            
+            // Rate limiting check
+            if (!CryptoUtils.checkRateLimit(this.deviceId)) {
+                throw new Error('Too many activation attempts. Please try again later.');
+            }
+            
             // Chuẩn bị activation request
             const deviceInfo = this.getDeviceInfo();
             
             const payload = {
-                license_key: licenseKey,
+                license_key: licenseKey.trim(),
                 device_id: this.deviceId,
                 device_info: deviceInfo
             };
@@ -59,8 +69,14 @@ class LicenseManager {
             console.log('Activation payload:', JSON.stringify(payload, null, 2));
             console.log('Server URL:', this.serverUrl);
             
-            // Gửi activation request
-            const response = await axios.post(`${this.serverUrl}/api/activate`, payload);
+            // Gửi activation request với timeout
+            const response = await axios.post(`${this.serverUrl}/api/activate`, payload, {
+                timeout: 30000, // 30 seconds timeout
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'ElectronLicenseApp/1.0.0'
+                }
+            });
             
             console.log('Activation response:', response.data);
             
@@ -69,6 +85,9 @@ class LicenseManager {
                 this.activationToken = response.data.activation_token;
                 this.licenseData = response.data.license_info;
                 this.isActivated = true;
+                
+                // Clear rate limit on success
+                CryptoUtils.clearRateLimit(this.deviceId);
                 
                 // Lưu vào cache
                 this._saveLicenseCache();
@@ -84,15 +103,35 @@ class LicenseManager {
                 console.error('Response data:', error.response.data);
                 console.error('Response status:', error.response.status);
             }
+            
+            // Handle specific error types
+            if (error.code === 'ECONNABORTED') {
+                throw new Error('Connection timeout. Please check your internet connection.');
+            } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+                throw new Error('Cannot connect to license server. Please check your internet connection.');
+            } else if (error.message.includes('Too many activation attempts')) {
+                throw error; // Re-throw rate limiting errors
+            }
+            
             return false;
         }
     }
     
     /**
-     * Validate license (heartbeat check)
+     * Validate license (heartbeat check) với rate limiting
      */
     async validate(forceOnline = false) {
         try {
+            // Rate limiting check
+            if (!CryptoUtils.checkRateLimit(this.deviceId)) {
+                console.log('Rate limited: Too many validation attempts');
+                // Fallback to cache if available
+                if (this.licenseData && CryptoUtils.isCacheValid(this.licenseData, 1)) {
+                    return true;
+                }
+                return false;
+            }
+            
             // Kiểm tra cache trước (trừ khi force online)
             if (!forceOnline && this.licenseData) {
                 const cacheValid = CryptoUtils.isCacheValid(this.licenseData, 3); // 3 ngày grace period

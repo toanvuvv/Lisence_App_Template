@@ -1,6 +1,22 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const LicenseManager = require('./renderer/license');
+
+// Security: Set up CSP and other security headers
+app.whenReady().then(() => {
+    // Set up security headers
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': ["default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:8000;"],
+                'X-Content-Type-Options': ['nosniff'],
+                'X-Frame-Options': ['DENY'],
+                'X-XSS-Protection': ['1; mode=block']
+            }
+        });
+    });
+});
 
 // Khởi tạo License Manager
 const licenseManager = new LicenseManager({
@@ -15,9 +31,13 @@ function createWindow() {
         width: 1200,
         height: 800,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            enableRemoteModule: true
+            nodeIntegration: false,
+            contextIsolation: true,
+            enableRemoteModule: false,
+            preload: path.join(__dirname, 'preload.js'),
+            webSecurity: true,
+            allowRunningInsecureContent: false,
+            experimentalFeatures: false
         }
     });
 

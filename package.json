@@ -7,7 +7,9 @@
     "start": "electron .",
     "dev": "NODE_ENV=development electron .",
     "build": "electron-builder",
-    "dist": "electron-builder --publish=never"
+    "dist": "electron-builder --publish=never",
+    "security-check": "npm audit && npm outdated",
+    "test-security": "node src/utils/security-test.js"
   },
   "dependencies": {
     "axios": "^1.6.0",

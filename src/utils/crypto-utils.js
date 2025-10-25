@@ -3,31 +3,93 @@ const fs = require('fs');
 const path = require('path');
 
 class CryptoUtils {
+    // Rate limiting storage
+    static validationAttempts = new Map();
+    static maxAttempts = 5;
+    static timeWindow = 5 * 60 * 1000; // 5 minutes
+    
     /**
-     * Tạo encryption key từ device ID
+     * Tạo encryption key từ device ID với PBKDF2 (an toàn hơn)
      */
     static deriveKeyFromDeviceId(deviceId) {
-        return crypto.createHash('sha256').update(deviceId).digest();
+        const salt = crypto.createHash('sha256').update(deviceId).digest();
+        return crypto.pbkdf2Sync(deviceId, salt, 100000, 32, 'sha256');
     }
     
     /**
-     * Mã hóa data bằng AES-256
+     * Rate limiting cho validation attempts
+     */
+    static checkRateLimit(deviceId) {
+        const now = Date.now();
+        const attempts = this.validationAttempts.get(deviceId) || [];
+        
+        // Remove old attempts outside time window
+        const validAttempts = attempts.filter(time => now - time < this.timeWindow);
+        
+        if (validAttempts.length >= this.maxAttempts) {
+            return false; // Rate limited
+        }
+        
+        // Add current attempt
+        validAttempts.push(now);
+        this.validationAttempts.set(deviceId, validAttempts);
+        
+        return true;
+    }
+    
+    /**
+     * Clear rate limit for device
+     */
+    static clearRateLimit(deviceId) {
+        this.validationAttempts.delete(deviceId);
+    }
+    
+    /**
+     * Mã hóa data bằng AES-256-GCM (hiện đại và an toàn hơn)
      */
     static encryptData(data, key) {
-        const cipher = crypto.createCipher('aes-256-cbc', key);
-        let encrypted = cipher.update(data, 'utf8', 'hex');
-        encrypted += cipher.final('hex');
-        return encrypted;
+        try {
+            const iv = crypto.randomBytes(16);
+            const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+            
+            let encrypted = cipher.update(data, 'utf8', 'hex');
+            encrypted += cipher.final('hex');
+            
+            const authTag = cipher.getAuthTag();
+            
+            // Return format: iv:authTag:encrypted
+            return iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
+        } catch (error) {
+            console.error('Encryption error:', error);
+            throw new Error('Failed to encrypt data');
+        }
     }
     
     /**
-     * Giải mã data bằng AES-256
+     * Giải mã data bằng AES-256-GCM
      */
     static decryptData(encryptedData, key) {
-        const decipher = crypto.createDecipher('aes-256-cbc', key);
-        let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-        return decrypted;
+        try {
+            const parts = encryptedData.split(':');
+            if (parts.length !== 3) {
+                throw new Error('Invalid encrypted data format');
+            }
+            
+            const iv = Buffer.from(parts[0], 'hex');
+            const authTag = Buffer.from(parts[1], 'hex');
+            const encrypted = parts[2];
+            
+            const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+            decipher.setAuthTag(authTag);
+            
+            let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+            decrypted += decipher.final('utf8');
+            
+            return decrypted;
+        } catch (error) {
+            console.error('Decryption error:', error);
+            throw new Error('Failed to decrypt data');
+        }
     }
     
     /**
