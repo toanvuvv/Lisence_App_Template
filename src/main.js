@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
+require('dotenv').config();
 const LicenseManager = require('./renderer/license');
 
 // Security: Set up CSP and other security headers
@@ -18,10 +19,10 @@ app.whenReady().then(() => {
     });
 });
 
-// Khởi tạo License Manager
+// Khởi tạo các managers
 const licenseManager = new LicenseManager({
-    serverUrl: 'http://127.0.0.1:8000', // Thay đổi URL server của bạn
-    secretKey: 'Vuductoan02' // Thay đổi secret key
+    serverUrl: process.env.LICENSE_SERVER_URL || 'https://serverlisencemanager.up.railway.app',
+    secretKey: process.env.SECRET_KEY || 'EuxJskkn1pJM4KHNMKjqqLlcE8yltisBwsDLaPO0oN0'
 });
 
 let mainWindow;
@@ -34,7 +35,7 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             enableRemoteModule: false,
-            preload: path.join(__dirname, 'preload.js'),
+            preload: path.join(__dirname, 'main/preload.js'),
             webSecurity: true,
             allowRunningInsecureContent: false,
             experimentalFeatures: false

@@ -188,17 +188,35 @@ class DeviceInfo {
         const diskSerial = DeviceInfo.getDiskSerial();
         const motherboardSerial = DeviceInfo.getMotherboardSerial();
         
+        // DEBUG: In ra các giá trị
+        console.log('=== Device ID Debug (Client) ===');
+        console.log('MAC Address:', macAddress);
+        console.log('CPU ID:', cpuId);
+        console.log('Disk Serial:', diskSerial);
+        console.log('Motherboard Serial:', motherboardSerial);
+        console.log('Secret Key:', secretKey);
+        
         // Kết hợp thông tin phần cứng
         const hwInfo = `${macAddress}:${cpuId}:${diskSerial}:${motherboardSerial}`;
+        console.log('Hardware Info String:', hwInfo);
+        
+        // Đảm bảo encoding UTF-8 khớp với server Python
+        // Server Python dùng: secret_key.encode('utf-8') và hardware_info.encode('utf-8')
+        // Node.js cần explicit convert để khớp: Buffer.from(string, 'utf8')
+        const secretKeyBuffer = Buffer.from(secretKey, 'utf8');
+        const hwInfoBuffer = Buffer.from(hwInfo, 'utf8');
         
         // Tạo HMAC-SHA256 hash
-        const deviceId = crypto.createHmac('sha256', secretKey).update(hwInfo).digest('hex');
+        const deviceId = crypto.createHmac('sha256', secretKeyBuffer).update(hwInfoBuffer).digest('hex');
+        console.log('Generated Device ID:', deviceId);
+        console.log('================================');
         
         return deviceId;
     }
     
     /**
      * Lấy thông tin thiết bị cho activation
+     * Trả về định dạng snake_case để khớp với server Python
      */
     static getDeviceInfo() {
         return {
@@ -210,10 +228,11 @@ class DeviceInfo {
             cpuCount: os.cpus().length,
             memoryTotal: os.totalmem(),
             uptime: os.uptime(),
-            macAddress: DeviceInfo.getMacAddress(),
-            cpuId: DeviceInfo.getCpuId(),
-            diskSerial: DeviceInfo.getDiskSerial(),
-            motherboardSerial: DeviceInfo.getMotherboardSerial()
+            // Định dạng snake_case để khớp với server
+            mac_address: DeviceInfo.getMacAddress(),
+            cpu_id: DeviceInfo.getCpuId(),
+            disk_serial: DeviceInfo.getDiskSerial(),
+            motherboard_serial: DeviceInfo.getMotherboardSerial()
         };
     }
 }
